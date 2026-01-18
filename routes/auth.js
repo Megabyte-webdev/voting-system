@@ -5,6 +5,9 @@ import jwt from "jsonwebtoken";
 
 const authRoutes = Router();
 
+/* =========================
+   STUDENT LOGIN
+========================= */
 authRoutes.post("/login", async (req, res) => {
   const { matricNo, password } = req.body;
 
@@ -24,6 +27,33 @@ authRoutes.post("/login", async (req, res) => {
   );
 
   res.json({ token });
+});
+
+/* =========================
+   STUDENT SIGNUP
+========================= */
+authRoutes.post("/signup", async (req, res) => {
+  const { name, matricNo, password } = req.body;
+
+  // Check if matric number already exists
+  const existing = await db.query.users.findFirst({
+    where: (u, { eq }) => eq(u.matricNo, matricNo),
+  });
+  if (existing)
+    return res.status(400).json({ message: "Matric number already exists" });
+
+  // Hash password
+  const hashed = await bcrypt.hash(password, 10);
+
+  // Insert new user
+  await db.insert(db.schema.users).values({
+    name,
+    matricNo,
+    password: hashed,
+    role: "student", // default role
+  });
+
+  res.status(201).json({ message: "Account created successfully" });
 });
 
 export default authRoutes;
