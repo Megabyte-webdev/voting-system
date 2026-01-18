@@ -1,13 +1,11 @@
 import { drizzle } from "drizzle-orm/node-postgres";
 import pg from "pg";
 import * as schema from "./schema.js";
+import dotenv from "dotenv";
+dotenv.config();
 
 const pool = new pg.Pool({
-  host: "localhost",
-  port: 5432,
-  user: "postgres",
-  password: "afowebdev",
-  database: "election_db",
+  connectionString: process.env.DATABASE_URL,
 });
 
 const testConnection = async () => {
