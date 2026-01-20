@@ -145,42 +145,103 @@ export async function listAbuseLogs(req, res) {
   }
 }
 
-// Activate election
+// Activate an election
 export const activateElection = async (req, res) => {
   try {
     const { id } = req.params;
 
-    // Find election by id
-    const election = elections.find((e) => e.id === id);
+    // Fetch the election
+    const [election] = await db
+      .select()
+      .from(elections)
+      .where(eq(elections.id, id));
+
     if (!election) {
       return res
         .status(404)
         .json({ success: false, message: "Election not found" });
     }
 
-    // Set all other elections to inactive (optional, if only one can be active)
-    elections.forEach((e) => {
-      if (e.id !== id && e.status === "active") e.status = "upcoming";
-    });
+    // Deactivate all other elections (if only one can be active)
+    await db
+      .update(elections)
+      .set({ status: "upcoming" })
+      .where(eq(elections.status, "active"));
 
     // Activate this election
-    election.status = "active";
+    await db
+      .update(elections)
+      .set({ status: "active" })
+      .where(eq(elections.id, id));
 
-    return res.json({ success: true, election });
+    return res.json({
+      success: true,
+      election: { ...election, status: "active" },
+    });
   } catch (err) {
     console.error("Failed to activate election:", err);
     return res.status(500).json({ success: false, message: "Server error" });
   }
 };
 
+// Deactivate an election
 export const deactivateElection = async (req, res) => {
-  const { id } = req.params;
-  const election = elections.find((e) => e.id === id);
-  if (!election)
-    return res
-      .status(404)
-      .json({ success: false, message: "Election not found" });
+  try {
+    const { id } = req.params;
 
-  election.status = "upcoming"; // or "inactive"
-  res.json({ success: true, election });
+    const [election] = await db
+      .select()
+      .from(elections)
+      .where(eq(elections.id, id));
+
+    if (!election) {
+      return res
+        .status(404)
+        .json({ success: false, message: "Election not found" });
+    }
+
+    // Set status to upcoming
+    await db
+      .update(elections)
+      .set({ status: "upcoming" })
+      .where(eq(elections.id, id));
+
+    return res.json({
+      success: true,
+      election: { ...election, status: "upcoming" },
+    });
+  } catch (err) {
+    console.error("Failed to deactivate election:", err);
+    return res.status(500).json({ success: false, message: "Server error" });
+  }
 };
+
+export async function getPositionsWithCandidates(req, res) {
+  try {
+    const { electionId } = req.query;
+
+    // Fetch positions for this election
+    const pos = await db
+      .select()
+      .from(positions)
+      .where(eq(positions.electionId, electionId));
+
+    // Fetch candidates for these positions
+    const posWithCandidates = await Promise.all(
+      pos.map(async (p) => {
+        const cands = await db
+          .select()
+          .from(candidates)
+          .where(eq(candidates.positionId, p.id));
+        return { ...p, candidates: cands };
+      }),
+    );
+
+    res.json({ positions: posWithCandidates });
+  } catch (err) {
+    console.error(err);
+    res
+      .status(500)
+      .json({ error: "Failed to fetch positions with candidates" });
+  }
+}

@@ -7,6 +7,7 @@ import {
   createElection,
   createPosition,
   deactivateElection,
+  getPositionsWithCandidates,
   listAbuseLogs,
   listCandidates,
   listElections,
@@ -31,7 +32,7 @@ adminRoutes.patch("/:id/deactivate", deactivateElection);
 adminRoutes.get("/votes", listVotes);
 adminRoutes.get("/abuse-logs", listAbuseLogs);
 adminRoutes.get("/elections", listElections);
-adminRoutes.get("/positions", listPositions);
+adminRoutes.get("/positions", getPositionsWithCandidates);
 adminRoutes.get("/candidates", listCandidates);
 
 export default adminRoutes;
