@@ -1,10 +1,12 @@
 import express from "express";
 import { adminAuth } from "../middlewares/adminAuth.js";
 import {
+  activateElection,
   closeElection,
   createCandidate,
   createElection,
   createPosition,
+  deactivateElection,
   listAbuseLogs,
   listCandidates,
   listElections,
@@ -22,6 +24,8 @@ adminRoutes.post("/elections", createElection);
 adminRoutes.post("/positions", createPosition);
 adminRoutes.post("/candidates", createCandidate);
 adminRoutes.post("/elections/:id/close", closeElection);
+adminRoutes.patch("/:id/activate", activateElection);
+adminRoutes.patch("/:id/deactivate", deactivateElection);
 
 // Audit endpoints
 adminRoutes.get("/votes", listVotes);

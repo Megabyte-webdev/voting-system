@@ -144,3 +144,43 @@ export async function listAbuseLogs(req, res) {
     res.status(500).json({ error: "Internal server error." });
   }
 }
+
+// Activate election
+export const activateElection = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    // Find election by id
+    const election = elections.find((e) => e.id === id);
+    if (!election) {
+      return res
+        .status(404)
+        .json({ success: false, message: "Election not found" });
+    }
+
+    // Set all other elections to inactive (optional, if only one can be active)
+    elections.forEach((e) => {
+      if (e.id !== id && e.status === "active") e.status = "upcoming";
+    });
+
+    // Activate this election
+    election.status = "active";
+
+    return res.json({ success: true, election });
+  } catch (err) {
+    console.error("Failed to activate election:", err);
+    return res.status(500).json({ success: false, message: "Server error" });
+  }
+};
+
+export const deactivateElection = async (req, res) => {
+  const { id } = req.params;
+  const election = elections.find((e) => e.id === id);
+  if (!election)
+    return res
+      .status(404)
+      .json({ success: false, message: "Election not found" });
+
+  election.status = "upcoming"; // or "inactive"
+  res.json({ success: true, election });
+};
