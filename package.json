@@ -5,7 +5,10 @@
   "type": "module",
   "scripts": {
     "dev": "nodemon server.js",
-    "start": "node server.js"
+    "start": "node server.js",
+    "generate": "npx drizzle-kit generate",
+    "migrate": "npx drizzle-kit migrate",
+    "push": "npx drizzle-kit push"
   },
   "keywords": [],
   "author": "",
@@ -14,11 +17,15 @@
   "dependencies": {
     "bcrypt": "^6.0.0",
     "cors": "^2.8.5",
+    "crypto": "^1.0.1",
     "dotenv": "^17.2.3",
+    "drizzle-kit": "^0.31.8",
     "drizzle-orm": "^0.45.1",
     "express": "^5.2.1",
+    "express-rate-limit": "^8.2.1",
     "jsonwebtoken": "^9.0.3",
     "pg": "^8.17.1",
+    "uuid": "^13.0.0",
     "zod": "^4.3.5"
   },
   "devDependencies": {
