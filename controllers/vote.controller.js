@@ -4,7 +4,7 @@ import { and, eq } from "drizzle-orm";
 import { hashBiometric } from "../services/biometric.service.js";
 import { logAbuse } from "../services/abuse.service.js";
 
-export async function submitVote(req, res) {
+  export async function submitVote(req, res) {
   try {
     const {
       matricNo,
@@ -18,12 +18,29 @@ export async function submitVote(req, res) {
     const ipAddress = req.ip;
     const userAgent = req.headers["user-agent"] || null;
 
-    // 1. Block duplicate matric
+    // 0. REQUIRED FIELD VALIDATION
+    if (
+      !matricNo ||
+      !deviceId ||
+      !positionId ||
+      !candidateId ||
+      !biometricType
+    ) {
+      return res.status(400).json({ error: "Missing required fields" });
+    }
+
+    if (biometricType !== "none" && !biometricPayload) {
+      return res
+        .status(400)
+        .json({ error: "Biometric verification required" });
+    }
+
+    // 1. Block duplicate matric (per position)
     const existingByMatric = await db
       .select()
       .from(votes)
       .where(
-        and(eq(votes.matricNo, matricNo), eq(votes.positionId, positionId)),
+        and(eq(votes.matricNo, matricNo), eq(votes.positionId, positionId))
       );
 
     if (existingByMatric.length > 0) {
@@ -34,10 +51,12 @@ export async function submitVote(req, res) {
         action: "duplicate_vote_by_matric",
       });
 
-      return res.status(403).json({ error: "This matric has already voted." });
+      return res
+        .status(403)
+        .json({ error: "This matric has already voted for this position." });
     }
 
-    // 2. Biometric enforcement
+    // 2. Biometric enforcement (only if biometric is used)
     let biometricHash = null;
 
     if (biometricType !== "none") {
@@ -49,8 +68,8 @@ export async function submitVote(req, res) {
         .where(
           and(
             eq(votes.biometricHash, biometricHash),
-            eq(votes.positionId, positionId),
-          ),
+            eq(votes.positionId, positionId)
+          )
         );
 
       if (existingByBio.length > 0) {
@@ -63,60 +82,28 @@ export async function submitVote(req, res) {
           action: "duplicate_vote_by_biometric",
         });
 
-        return res.status(403).json({ error: "Biometric already used." });
-      }
-    }
-
-    // 3. Fallback device lock
-    if (biometricType === "none") {
-      const deviceVotes = await db
-        .select()
-        .from(votes)
-        .where(eq(votes.deviceId, deviceId));
-
-      if (deviceVotes.length >= 2) {
-        await logAbuse({
-          matricNo,
-          deviceId,
-          ipAddress,
-          userAgent,
-          action: "device_vote_limit_reached",
-        });
-
         return res
           .status(403)
-          .json({ error: "Too many votes from this device." });
+          .json({ error: "This biometric has already voted." });
       }
     }
 
-    // 4. Insert vote
+    // 3. Insert vote
     await db.insert(votes).values({
       matricNo,
       biometricHash,
       biometricType,
       deviceId,
-      candidateId,
       positionId,
-    });
-
-    // 5. Lock voter identity
-    await db.insert(voters).values({
-      matricNo,
-      biometricHash,
-      biometricType,
-      deviceId,
+      candidateId,
       ipAddress,
       userAgent,
+      createdAt: new Date(),
     });
 
-    return res.json({ success: true, message: "Vote submitted." });
+    return res.json({ success: true });
   } catch (err) {
-    console.error("Vote error:", err);
-
-    if (err.code === "23505") {
-      return res.status(409).json({ error: "Duplicate vote detected." });
-    }
-
-    return res.status(500).json({ error: "Internal server error." });
+    console.error("Vote submission error:", err);
+    return res.status(500).json({ error: "Internal server error" });
   }
-}
+      }
