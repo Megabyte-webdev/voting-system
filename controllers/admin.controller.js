@@ -8,6 +8,11 @@ import {
   abuseLogs,
 } from "../db/schema.js";
 import { eq } from "drizzle-orm";
+import { JSDOM } from "jsdom";
+import createDOMPurify from "dompurify";
+
+const window = new JSDOM("").window;
+const DOMPurify = createDOMPurify(window);
 
 /* -------------------- Security Utilities -------------------- */
 
@@ -47,7 +52,7 @@ export async function createElection(req, res) {
       !isSafeDate(startTime) ||
       !isSafeDate(endTime)
     ) {
-      return res.status(400).json({ error: "Invalid input." });
+      return res.status(400).json({ error: "Invalid or malicious input." });
     }
 
     const startDate = new Date(startTime);
