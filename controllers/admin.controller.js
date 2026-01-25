@@ -18,7 +18,16 @@ function isUUID(v) {
 }
 
 function isSafeText(str, max = 255) {
-  return typeof str === "string" && str.trim().length > 0 && str.length <= max;
+  if (typeof str !== "string") return null;
+
+  // Strip ALL tags (keep only text)
+  const clean = DOMPurify.sanitize(str, {
+    ALLOWED_TAGS: [],
+    ALLOWED_ATTR: [],
+  }).trim();
+
+  if (clean.length === 0 || clean.length > max) return null;
+  return clean;
 }
 
 function isSafeDate(d) {
@@ -30,10 +39,11 @@ function isSafeDate(d) {
 
 export async function createElection(req, res) {
   try {
-    const { title, startTime, endTime } = req.body;
+    const { title, startTime, endTime, desription } = req.body;
 
     if (
       !isSafeText(title, 150) ||
+      !isSafeText(description, 255) ||
       !isSafeDate(startTime) ||
       !isSafeDate(endTime)
     ) {
@@ -56,6 +66,7 @@ export async function createElection(req, res) {
       title: title.trim(),
       startTime: startDate,
       endTime: endDate,
+      description: description.trim(),
       status: "upcoming",
     });
 

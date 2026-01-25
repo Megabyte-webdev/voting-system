@@ -21,6 +21,7 @@ CREATE TABLE "candidates" (
 CREATE TABLE "elections" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"title" varchar(200) NOT NULL,
+	"description" varchar(255) NOT NULL,
 	"start_time" timestamp NOT NULL,
 	"end_time" timestamp NOT NULL,
 	"status" varchar(20) DEFAULT 'upcoming'
