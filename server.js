@@ -11,9 +11,10 @@ app.use(express.urlencoded({ extended: true }));
 app.use(
   cors({
     origin: [
-      "https://ogun-students-election.vercel.app/",
       "http://localhost:5173",
+      "https://ogun-students-election.vercel.app",
     ],
+    methods: ["GET", "POST", "PUT", "DELETE"],
     credentials: true,
   }),
 );
