@@ -6,12 +6,11 @@ export function validateVotePayload(req, res, next) {
     biometricType,
     biometricPayload,
     deviceId,
-    electionId,
     positionId,
     candidateId,
   } = req.body;
 
-  if (!matricNo || !electionId || !positionId || !candidateId) {
+  if (!matricNo || !positionId || !candidateId) {
     return res.status(400).json({ error: "Missing required fields." });
   }
 

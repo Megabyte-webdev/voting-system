@@ -9,239 +9,416 @@ import {
 } from "../db/schema.js";
 import { eq } from "drizzle-orm";
 
-// Create a new election
+/* -------------------- Security Utilities -------------------- */
+
+const UUID_REGEX = /^[0-9a-fA-F-]{36}$/;
+
+function isUUID(v) {
+  return typeof v === "string" && UUID_REGEX.test(v);
+}
+
+function isSafeText(str, max = 255) {
+  return typeof str === "string" && str.trim().length > 0 && str.length <= max;
+}
+
+function isSafeDate(d) {
+  const dt = new Date(d);
+  return !isNaN(dt.getTime());
+}
+
+/* -------------------- Create Election -------------------- */
+
 export async function createElection(req, res) {
   try {
     const { title, startTime, endTime } = req.body;
-    if (!title || !startTime || !endTime) {
-      return res.status(400).json({ error: "Missing required fields." });
+
+    if (
+      !isSafeText(title, 150) ||
+      !isSafeDate(startTime) ||
+      !isSafeDate(endTime)
+    ) {
+      return res.status(400).json({ error: "Invalid input." });
     }
 
-    // Convert strings to Date objects
     const startDate = new Date(startTime);
     const endDate = new Date(endTime);
-    if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) {
-      return res.status(400).json({ error: "Invalid date format." });
+
+    if (startDate >= endDate) {
+      return res
+        .status(400)
+        .json({ error: "End time must be after start time." });
     }
+
     const id = uuidv4();
+
     await db.insert(elections).values({
       id,
-      title,
+      title: title.trim(),
       startTime: startDate,
       endTime: endDate,
       status: "upcoming",
     });
 
-    res.json({ success: true, electionId: id });
+    return res.json({ success: true, electionId: id });
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "Internal server error." });
+    console.error("createElection:", err);
+    return res.status(500).json({ error: "Internal server error." });
   }
 }
 
-// Create a position for an election
+/* -------------------- Create Position -------------------- */
+
 export async function createPosition(req, res) {
   try {
     const { electionId, name } = req.body;
-    if (!electionId || !name)
-      return res.status(400).json({ error: "Missing required fields." });
+
+    if (!isUUID(electionId) || !isSafeText(name, 100)) {
+      return res.status(400).json({ error: "Invalid input." });
+    }
+
+    const [election] = await db
+      .select({ id: elections.id })
+      .from(elections)
+      .where(eq(elections.id, electionId));
+
+    if (!election) {
+      return res.status(404).json({ error: "Election not found." });
+    }
 
     const id = uuidv4();
-    await db.insert(positions).values({ id, electionId, name });
 
-    res.json({ success: true, positionId: id });
+    await db.insert(positions).values({
+      id,
+      electionId,
+      name: name.trim(),
+    });
+
+    return res.json({ success: true, positionId: id });
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "Internal server error." });
+    console.error("createPosition:", err);
+    return res.status(500).json({ error: "Internal server error." });
   }
 }
 
-// Create a candidate
+/* -------------------- Create Candidate -------------------- */
+
 export async function createCandidate(req, res) {
   try {
     const { positionId, name, photo, manifesto } = req.body;
-    if (!positionId || !name)
-      return res.status(400).json({ error: "Missing required fields." });
+
+    if (!isUUID(positionId) || !isSafeText(name, 120)) {
+      return res.status(400).json({ error: "Invalid input." });
+    }
+
+    const [position] = await db
+      .select({ id: positions.id })
+      .from(positions)
+      .where(eq(positions.id, positionId));
+
+    if (!position) {
+      return res.status(404).json({ error: "Position not found." });
+    }
 
     const id = uuidv4();
-    await db
-      .insert(candidates)
-      .values({ id, positionId, name, photo, manifesto });
 
-    res.json({ success: true, candidateId: id });
+    await db.insert(candidates).values({
+      id,
+      positionId,
+      name: name.trim(),
+      photo: isSafeText(photo, 500) ? photo.trim() : null,
+      manifesto: isSafeText(manifesto, 2000) ? manifesto.trim() : null,
+    });
+
+    return res.json({ success: true, candidateId: id });
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "Internal server error." });
+    console.error("createCandidate:", err);
+    return res.status(500).json({ error: "Internal server error." });
   }
 }
 
-// Close an election early
+/* -------------------- Close Election -------------------- */
+
 export async function closeElection(req, res) {
   try {
     const electionId = req.params.id;
+
+    if (!isUUID(electionId)) {
+      return res.status(400).json({ error: "Invalid election ID." });
+    }
+
+    const [election] = await db
+      .select({ id: elections.id })
+      .from(elections)
+      .where(eq(elections.id, electionId));
+
+    if (!election) {
+      return res.status(404).json({ error: "Election not found." });
+    }
+
     await db
       .update(elections)
       .set({ status: "closed" })
       .where(eq(elections.id, electionId));
 
-    res.json({ success: true, message: "Election closed." });
+    return res.json({ success: true, message: "Election closed." });
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "Internal server error." });
+    console.error("closeElection:", err);
+    return res.status(500).json({ error: "Internal server error." });
   }
 }
+
+/* -------------------- List Elections (Safe Fields) -------------------- */
 
 export async function listElections(req, res) {
   try {
-    const allElections = await db.select().from(elections);
-    res.json({ elections: allElections });
+    const allElections = await db
+      .select({
+        id: elections.id,
+        title: elections.title,
+        startTime: elections.startTime,
+        endTime: elections.endTime,
+        status: elections.status,
+      })
+      .from(elections);
+
+    return res.json({ elections: allElections });
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "Internal server error." });
+    console.error("listElections:", err);
+    return res.status(500).json({ error: "Internal server error." });
   }
 }
+
+/* -------------------- Get Active Election -------------------- */
+
+export async function getActiveElection(req, res) {
+  try {
+    const [activeElection] = await db
+      .select({
+        id: elections.id,
+        title: elections.title,
+        startTime: elections.startTime,
+        endTime: elections.endTime,
+        status: elections.status,
+      })
+      .from(elections)
+      .where(eq(elections.status, "active"))
+      .limit(1);
+
+    if (!activeElection) {
+      return res.status(404).json({ error: "No active election found." });
+    }
+
+    return res.json({ election: activeElection });
+  } catch (err) {
+    console.error("getActiveElection:", err);
+    return res.status(500).json({ error: "Internal server error." });
+  }
+}
+
+/* -------------------- Activate Election (Race Safe) -------------------- */
+
+export async function activateElection(req, res) {
+  try {
+    const { id } = req.params;
+
+    if (!isUUID(id)) {
+      return res.status(400).json({ error: "Invalid election ID." });
+    }
+
+    const [election] = await db
+      .select({ id: elections.id })
+      .from(elections)
+      .where(eq(elections.id, id));
+
+    if (!election) {
+      return res.status(404).json({ error: "Election not found." });
+    }
+
+    await db.transaction(async (tx) => {
+      await tx.update(elections).set({ status: "upcoming" });
+      await tx
+        .update(elections)
+        .set({ status: "active" })
+        .where(eq(elections.id, id));
+    });
+
+    return res.json({ success: true });
+  } catch (err) {
+    console.error("activateElection:", err);
+    return res.status(500).json({ error: "Internal server error." });
+  }
+}
+export async function updateElection(req, res) {
+  const { id } = req.params;
+  const { title, startTime, endTime, status, description } = req.body;
+
+  try {
+    // Check if election exists
+    const [election] = await db
+      .select()
+      .from(elections)
+      .where(eq(elections.id, id));
+
+    if (!election) {
+      return res.status(404).json({ error: "Election not found" });
+    }
+
+    // Prepare fields to update
+    const updatedFields = {};
+    if (title) updatedFields.title = title;
+    if (startTime) updatedFields.startTime = new Date(startTime);
+    if (endTime) updatedFields.endTime = new Date(endTime);
+    if (status) updatedFields.status = status;
+    if (description) updatedFields.description = description;
+
+    // Update in DB
+    await db.update(elections).set(updatedFields).where(eq(elections.id, id));
+
+    // Return updated election
+    const [updatedElection] = await db
+      .select()
+      .from(elections)
+      .where(eq(elections.id, id));
+
+    res.json({ success: true, election: updatedElection });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Failed to update election" });
+  }
+}
+
+/* -------------------- Deactivate Election -------------------- */
+
+export async function deactivateElection(req, res) {
+  try {
+    const { id } = req.params;
+
+    if (!isUUID(id)) {
+      return res.status(400).json({ error: "Invalid election ID." });
+    }
+
+    const [election] = await db
+      .select({ id: elections.id })
+      .from(elections)
+      .where(eq(elections.id, id));
+
+    if (!election) {
+      return res.status(404).json({ error: "Election not found." });
+    }
+
+    await db
+      .update(elections)
+      .set({ status: "upcoming" })
+      .where(eq(elections.id, id));
+
+    return res.json({ success: true });
+  } catch (err) {
+    console.error("deactivateElection:", err);
+    return res.status(500).json({ error: "Internal server error." });
+  }
+}
+
+/******************** List Candidates (Safe Fields) ********************/
+
+export async function listCandidates(req, res) {
+  try {
+    const allCandidates = await db
+      .select({
+        id: candidates.id,
+        name: candidates.name,
+        positionId: candidates.positionId,
+        photo: candidates.photo,
+        manifesto: candidates.manifesto,
+      })
+      .from(candidates);
+
+    return res.json({ candidates: allCandidates });
+  } catch (err) {
+    console.error("listCandidates:", err);
+    return res.status(500).json({ error: "Internal server error." });
+  }
+}
+/******************** List Positions (Safe Fields) ********************/
 
 export async function listPositions(req, res) {
   try {
-    // Optionally join with election title
-    const allPositions = await db.select().from(positions);
+    const allPositions = await db
+      .select({
+        id: positions.id,
+        name: positions.name,
+        electionId: positions.electionId,
+      })
+      .from(positions);
 
-    res.json({ positions: allPositions });
+    return res.json({ positions: allPositions });
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "Internal server error." });
+    console.error("listPositions:", err);
+    return res.status(500).json({ error: "Internal server error." });
   }
 }
-export async function listCandidates(req, res) {
-  try {
-    // Optionally join with election title
-    const allCandidates = await db.select().from(candidates);
 
-    res.json({ candidates: allCandidates });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "Internal server error." });
-  }
-}
-// List all votes
 export async function listVotes(req, res) {
   try {
-    const allVotes = await db.select().from(votes);
-    res.json({ votes: allVotes });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "Internal server error." });
-  }
-}
+    const allVotes = await db
+      .select({
+        id: votes.id,
+        userId: votes.deviceId, // anonymized identifier instead of matricNo
+        candidateId: votes.candidateId,
+        positionId: votes.positionId,
+        createdAt: votes.createdAt,
+      })
+      .from(votes);
 
-// List abuse logs
-export async function listAbuseLogs(req, res) {
-  try {
-    const logs = await db.select().from(abuseLogs);
-    res.json({ logs });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "Internal server error." });
-  }
-}
-
-// Activate an election
-export const activateElection = async (req, res) => {
-  try {
-    const { id } = req.params;
-
-    // Fetch the election
-    const [election] = await db
-      .select()
-      .from(elections)
-      .where(eq(elections.id, id));
-
-    if (!election) {
-      return res
-        .status(404)
-        .json({ success: false, message: "Election not found" });
-    }
-
-    // Deactivate all other elections (if only one can be active)
-    await db
-      .update(elections)
-      .set({ status: "upcoming" })
-      .where(eq(elections.status, "active"));
-
-    // Activate this election
-    await db
-      .update(elections)
-      .set({ status: "active" })
-      .where(eq(elections.id, id));
-
-    return res.json({
-      success: true,
-      election: { ...election, status: "active" },
-    });
-  } catch (err) {
-    console.error("Failed to activate election:", err);
-    return res.status(500).json({ success: false, message: "Server error" });
-  }
-};
-
-// Deactivate an election
-export const deactivateElection = async (req, res) => {
-  try {
-    const { id } = req.params;
-
-    const [election] = await db
-      .select()
-      .from(elections)
-      .where(eq(elections.id, id));
-
-    if (!election) {
-      return res
-        .status(404)
-        .json({ success: false, message: "Election not found" });
-    }
-
-    // Set status to upcoming
-    await db
-      .update(elections)
-      .set({ status: "upcoming" })
-      .where(eq(elections.id, id));
-
-    return res.json({
-      success: true,
-      election: { ...election, status: "upcoming" },
-    });
-  } catch (err) {
-    console.error("Failed to deactivate election:", err);
-    return res.status(500).json({ success: false, message: "Server error" });
-  }
-};
-
-export async function getPositionsWithCandidates(req, res) {
-  try {
-    const { electionId } = req.query;
-
-    // Fetch positions for this election
-    const pos = await db
-      .select()
-      .from(positions)
-      .where(eq(positions.electionId, electionId));
-
-    // Fetch candidates for these positions
-    const posWithCandidates = await Promise.all(
-      pos.map(async (p) => {
-        const cands = await db
-          .select()
+    // Optionally, join with candidate and position names for readability
+    const enrichedVotes = await Promise.all(
+      allVotes.map(async (v) => {
+        const [candidate] = await db
+          .select({ name: candidates.name })
           .from(candidates)
-          .where(eq(candidates.positionId, p.id));
-        return { ...p, candidates: cands };
+          .where(eq(candidates.id, v.candidateId));
+
+        const [position] = await db
+          .select({ name: positions.name })
+          .from(positions)
+          .where(eq(positions.id, v.positionId));
+
+        return {
+          id: v.id,
+          userId: v.userId,
+          candidate: candidate ? candidate.name : null,
+          position: position ? position.name : null,
+          createdAt: v.createdAt,
+        };
       }),
     );
 
-    res.json({ positions: posWithCandidates });
+    return res.json({ votes: enrichedVotes });
   } catch (err) {
-    console.error(err);
-    res
-      .status(500)
-      .json({ error: "Failed to fetch positions with candidates" });
+    console.error("listVotes:", err);
+    return res.status(500).json({ error: "Internal server error." });
+  }
+}
+
+// List Abuse Logs (correct columns)
+export async function listAbuseLogs(req, res) {
+  try {
+    const logs = await db
+      .select({
+        id: abuseLogs.id,
+        matricNo: abuseLogs.matricNo,
+        biometricHash: abuseLogs.biometricHash,
+        biometricType: abuseLogs.biometricType,
+        deviceId: abuseLogs.deviceId,
+        ipAddress: abuseLogs.ipAddress,
+        userAgent: abuseLogs.userAgent,
+        action: abuseLogs.action,
+        occurredAt: abuseLogs.occurredAt,
+      })
+      .from(abuseLogs);
+
+    return res.json({ logs });
+  } catch (err) {
+    console.error("listAbuseLogs:", err);
+    return res.status(500).json({ error: "Internal server error." });
   }
 }

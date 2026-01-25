@@ -10,7 +10,10 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(
   cors({
-    origin: "https://ogun-students-election.vercel.app",
+    origin: [
+      "https://ogun-students-election.vercel.app",
+      "http://localhost:5173",
+    ],
     credentials: true,
   }),
 );

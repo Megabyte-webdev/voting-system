@@ -27,6 +27,7 @@ export const voters = pgTable("voters", {
 export const elections = pgTable("elections", {
   id: uuid("id").defaultRandom().primaryKey(),
   title: varchar("title", { length: 200 }).notNull(),
+  description: varchar("description", { length: 255 }).notNull(),
   startTime: timestamp("start_time").notNull(),
   endTime: timestamp("end_time").notNull(),
   status: varchar("status", { length: 20 }).default("upcoming"),

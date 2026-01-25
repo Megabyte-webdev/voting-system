@@ -7,12 +7,12 @@ import {
   createElection,
   createPosition,
   deactivateElection,
-  getPositionsWithCandidates,
   listAbuseLogs,
   listCandidates,
   listElections,
   listPositions,
   listVotes,
+  updateElection,
 } from "../controllers/admin.controller.js";
 
 const adminRoutes = express.Router();
@@ -27,12 +27,13 @@ adminRoutes.post("/candidates", createCandidate);
 adminRoutes.post("/elections/:id/close", closeElection);
 adminRoutes.patch("/:id/activate", activateElection);
 adminRoutes.patch("/:id/deactivate", deactivateElection);
+adminRoutes.patch("/elections/:id", updateElection);
 
 // Audit endpoints
 adminRoutes.get("/votes", listVotes);
 adminRoutes.get("/abuse-logs", listAbuseLogs);
 adminRoutes.get("/elections", listElections);
-adminRoutes.get("/positions", getPositionsWithCandidates);
+adminRoutes.get("/positions", listPositions);
 adminRoutes.get("/candidates", listCandidates);
 
 export default adminRoutes;
