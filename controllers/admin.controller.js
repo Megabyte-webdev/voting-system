@@ -39,7 +39,7 @@ function isSafeDate(d) {
 
 export async function createElection(req, res) {
   try {
-    const { title, startTime, endTime, desription } = req.body;
+    const { title, startTime, endTime, description } = req.body;
 
     if (
       !isSafeText(title, 150) ||
