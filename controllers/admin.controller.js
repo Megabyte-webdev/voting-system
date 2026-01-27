@@ -433,3 +433,133 @@ export async function listAbuseLogs(req, res) {
     return res.status(500).json({ error: "Internal server error." });
   }
 }
+
+/* -------------------- Delete Election -------------------- */
+export async function deleteElection(req, res) {
+  try {
+    const { id } = req.params;
+    if (!isUUID(id))
+      return res.status(400).json({ error: "Invalid election ID." });
+
+    const [election] = await db
+      .select()
+      .from(elections)
+      .where(eq(elections.id, id));
+
+    if (!election)
+      return res.status(404).json({ error: "Election not found." });
+
+    // Delete positions and candidates under this election first (cascade)
+    const electionPositions = await db
+      .select({ id: positions.id })
+      .from(positions)
+      .where(eq(positions.electionId, id));
+
+    for (const pos of electionPositions) {
+      await db.delete(candidates).where(eq(candidates.positionId, pos.id));
+    }
+
+    await db.delete(positions).where(eq(positions.electionId, id));
+    await db.delete(elections).where(eq(elections.id, id));
+
+    return res.json({
+      success: true,
+      message: "Election deleted successfully.",
+    });
+  } catch (err) {
+    console.error("deleteElection:", err);
+    return res.status(500).json({ error: "Internal server error." });
+  }
+}
+
+/* -------------------- Delete Position -------------------- */
+export async function deletePosition(req, res) {
+  try {
+    const { id } = req.params;
+    if (!isUUID(id))
+      return res.status(400).json({ error: "Invalid position ID." });
+
+    const [position] = await db
+      .select()
+      .from(positions)
+      .where(eq(positions.id, id));
+
+    if (!position)
+      return res.status(404).json({ error: "Position not found." });
+
+    // Delete all candidates under this position
+    await db.delete(candidates).where(eq(candidates.positionId, id));
+    await db.delete(positions).where(eq(positions.id, id));
+
+    return res.json({
+      success: true,
+      message: "Position deleted successfully.",
+    });
+  } catch (err) {
+    console.error("deletePosition:", err);
+    return res.status(500).json({ error: "Internal server error." });
+  }
+}
+
+/* -------------------- Update Candidate -------------------- */
+export async function updateCandidate(req, res) {
+  try {
+    const { id } = req.params;
+    const { name, photo, manifesto } = req.body;
+
+    if (!isUUID(id))
+      return res.status(400).json({ error: "Invalid candidate ID." });
+
+    const [candidate] = await db
+      .select()
+      .from(candidates)
+      .where(eq(candidates.id, id));
+
+    if (!candidate)
+      return res.status(404).json({ error: "Candidate not found." });
+
+    const updatedFields = {};
+    if (isSafeText(name, 120)) updatedFields.name = name.trim();
+    if (isSafeText(photo, 500)) updatedFields.photo = photo.trim();
+    if (isSafeText(manifesto, 2000)) updatedFields.manifesto = manifesto.trim();
+
+    await db.update(candidates).set(updatedFields).where(eq(candidates.id, id));
+
+    const [updatedCandidate] = await db
+      .select()
+      .from(candidates)
+      .where(eq(candidates.id, id));
+
+    return res.json({ success: true, candidate: updatedCandidate });
+  } catch (err) {
+    console.error("updateCandidate:", err);
+    return res.status(500).json({ error: "Internal server error." });
+  }
+}
+
+/* -------------------- Delete Candidate -------------------- */
+export async function deleteCandidate(req, res) {
+  try {
+    const { id } = req.params;
+    if (!isUUID(id))
+      return res.status(400).json({ error: "Invalid candidate ID." });
+
+    const [candidate] = await db
+      .select()
+      .from(candidates)
+      .where(eq(candidates.id, id));
+
+    if (!candidate)
+      return res.status(404).json({ error: "Candidate not found." });
+
+    await db.delete(candidates).where(eq(candidates.id, id));
+
+    return res.json({
+      success: true,
+      message: "Candidate deleted successfully.",
+    });
+  } catch (err) {
+    console.error("deleteCandidate:", err);
+    return res.status(500).json({ error: "Internal server error." });
+  }
+}

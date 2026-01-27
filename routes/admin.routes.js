@@ -13,6 +13,11 @@ import {
   listPositions,
   listVotes,
   updateElection,
+  // New imports
+  deleteElection,
+  deletePosition,
+  updateCandidate,
+  deleteCandidate,
 } from "../controllers/admin.controller.js";
 
 const adminRoutes = express.Router();
@@ -20,7 +25,7 @@ const adminRoutes = express.Router();
 // Protect all admin routes
 adminRoutes.use(adminAuth);
 
-// Election management
+/* -------------------- Election Management -------------------- */
 adminRoutes.post("/elections", createElection);
 adminRoutes.post("/positions", createPosition);
 adminRoutes.post("/candidates", createCandidate);
@@ -29,7 +34,20 @@ adminRoutes.patch("/:id/activate", activateElection);
 adminRoutes.patch("/:id/deactivate", deactivateElection);
 adminRoutes.patch("/elections/:id", updateElection);
 
-// Audit endpoints
+/* -------------------- New CRUD Routes -------------------- */
+// Delete election
+adminRoutes.delete("/elections/:id", deleteElection);
+
+// Delete position
+adminRoutes.delete("/positions/:id", deletePosition);
+
+// Update candidate
+adminRoutes.patch("/candidates/:id", updateCandidate);
+
+// Delete candidate
+adminRoutes.delete("/candidates/:id", deleteCandidate);
+
+/* -------------------- Audit / Listing -------------------- */
 adminRoutes.get("/votes", listVotes);
 adminRoutes.get("/abuse-logs", listAbuseLogs);
 adminRoutes.get("/elections", listElections);
