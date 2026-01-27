@@ -276,11 +276,11 @@ export async function updateElection(req, res) {
 
     // Prepare fields to update
     const updatedFields = {};
-    if (title) updatedFields.title = title;
-    if (startTime) updatedFields.startTime = new Date(startTime);
-    if (endTime) updatedFields.endTime = new Date(endTime);
+    if (isSafeText(title)) updatedFields.title = title;
+    if (isSafeDate(startTime)) updatedFields.startTime = new Date(startTime);
+    if (isSafeDate(endTime)) updatedFields.endTime = new Date(endTime);
     if (status) updatedFields.status = status;
-    if (description) updatedFields.description = description;
+    if (isSafeText(description)) updatedFields.description = description;
 
     // Update in DB
     await db.update(elections).set(updatedFields).where(eq(elections.id, id));
