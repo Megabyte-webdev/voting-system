@@ -8,11 +8,7 @@ import {
   abuseLogs,
 } from "../db/schema.js";
 import { eq } from "drizzle-orm";
-import { JSDOM } from "jsdom";
-import createDOMPurify from "dompurify";
-
-const window = new JSDOM("").window;
-const DOMPurify = createDOMPurify(window);
+import sanitizeHtml from "sanitize-html";
 
 /* -------------------- Security Utilities -------------------- */
 
@@ -25,10 +21,9 @@ function isUUID(v) {
 function isSafeText(str, max = 255) {
   if (typeof str !== "string") return null;
 
-  // Strip ALL tags (keep only text)
-  const clean = DOMPurify.sanitize(str, {
-    ALLOWED_TAGS: [],
-    ALLOWED_ATTR: [],
+  const clean = sanitizeHtml(str, {
+    allowedTags: [],
+    allowedAttributes: {},
   }).trim();
 
   if (clean.length === 0 || clean.length > max) return null;
