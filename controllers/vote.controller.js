@@ -54,24 +54,23 @@ export async function submitVote(req, res) {
     const electionId = position.electionId;
 
     // 2. Block duplicate matric (per election)
-    const existingByMatric = await db
+    const existingVoteForPosition = await db
       .select()
       .from(votes)
-      .leftJoin(positions, eq(positions.id, votes.positionId))
       .where(
-        and(eq(votes.matricNo, matricNo), eq(positions.electionId, electionId)),
+        and(eq(votes.matricNo, matricNo), eq(votes.positionId, positionId)),
       );
 
-    if (existingByMatric.length > 0) {
+    if (existingVoteForPosition.length > 0) {
       await logAbuse({
         matricNo,
         ipAddress,
         userAgent,
-        action: "duplicate_vote_by_matric",
+        action: "duplicate_vote_by_matric_for_position",
       });
+
       return res.status(403).json({
-        error:
-          "You have already voted in this election with this matric number.",
+        error: "You have already voted for this position.",
       });
     }
 
@@ -79,31 +78,30 @@ export async function submitVote(req, res) {
     let biometricHash = null;
 
     if (biometricType !== "none") {
-      biometricHash = hashBiometric(biometricPayload);
+      const biometricHash = hashBiometric(biometricPayload);
 
-      const existingByBio = await db
+      const existingBioForPosition = await db
         .select()
         .from(votes)
-        .leftJoin(positions, eq(positions.id, votes.positionId))
         .where(
           and(
             eq(votes.biometricHash, biometricHash),
-            eq(positions.electionId, electionId),
+            eq(votes.positionId, positionId),
           ),
         );
 
-      if (existingByBio.length > 0) {
+      if (existingBioForPosition.length > 0) {
         await logAbuse({
           matricNo,
           biometricHash,
           biometricType,
           ipAddress,
           userAgent,
-          action: "duplicate_vote_by_biometric",
+          action: "duplicate_vote_by_biometric_for_position",
         });
+
         return res.status(403).json({
-          error:
-            "This fingerprint has already been used to vote in this election. You cannot vote again with the same biometric.",
+          error: "This fingerprint has already been used for this position.",
         });
       }
     }

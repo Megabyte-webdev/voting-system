@@ -34,8 +34,9 @@ function isSafeText(str, max = 255) {
 }
 
 function isSafeDate(d) {
-  const dt = new Date(d);
-  return !isNaN(dt.getTime());
+  if (!d || typeof d !== "string") return false;
+  // Accept format YYYY-MM-DDTHH:mm
+  return /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(d);
 }
 
 /* -------------------------
@@ -359,37 +360,29 @@ export async function updateElection(req, res) {
   const { title, startTime, endTime, status, description } = req.body;
 
   try {
-    // Check if election exists
     const [election] = await db
       .select()
       .from(elections)
       .where(eq(elections.id, id));
+    if (!election) return res.status(404).json({ error: "Election not found" });
 
-    if (!election) {
-      return res.status(404).json({ error: "Election not found" });
-    }
-
-    // Prepare fields to update
     const updatedFields = {};
-    if (isSafeText(title)) updatedFields.title = title;
+    if (title) updatedFields.title = title.trim();
+    if (description) updatedFields.description = description.trim();
     if (isSafeDate(startTime)) updatedFields.startTime = new Date(startTime);
     if (isSafeDate(endTime)) updatedFields.endTime = new Date(endTime);
     if (status) updatedFields.status = status;
-    if (isSafeText(description)) updatedFields.description = description;
 
-    // Update in DB
     await db.update(elections).set(updatedFields).where(eq(elections.id, id));
 
-    // Return updated election
     const [updatedElection] = await db
       .select()
       .from(elections)
       .where(eq(elections.id, id));
-
-    res.json({ success: true, election: updatedElection });
+    return res.json({ success: true, election: updatedElection });
   } catch (err) {
     console.error(err);
-    res.status(500).json({ error: "Failed to update election" });
+    return res.status(500).json({ error: "Failed to update election" });
   }
 }
 
