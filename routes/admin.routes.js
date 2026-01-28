@@ -19,6 +19,7 @@ import {
   updateCandidate,
   deleteCandidate,
 } from "../controllers/admin.controller.js";
+import upload from "../middlewares/multer.js";
 
 const adminRoutes = express.Router();
 
@@ -28,11 +29,13 @@ adminRoutes.use(adminAuth);
 /* -------------------- Election Management -------------------- */
 adminRoutes.post("/elections", createElection);
 adminRoutes.post("/positions", createPosition);
-adminRoutes.post("/candidates", createCandidate);
 adminRoutes.post("/elections/:id/close", closeElection);
 adminRoutes.patch("/:id/activate", activateElection);
 adminRoutes.patch("/:id/deactivate", deactivateElection);
 adminRoutes.patch("/elections/:id", updateElection);
+
+adminRoutes.post("/candidates", upload.single("photo"), createCandidate);
+adminRoutes.patch("/candidates/:id", upload.single("photo"), updateCandidate);
 
 /* -------------------- New CRUD Routes -------------------- */
 // Delete election
@@ -40,9 +43,6 @@ adminRoutes.delete("/elections/:id", deleteElection);
 
 // Delete position
 adminRoutes.delete("/positions/:id", deletePosition);
-
-// Update candidate
-adminRoutes.patch("/candidates/:id", updateCandidate);
 
 // Delete candidate
 adminRoutes.delete("/candidates/:id", deleteCandidate);

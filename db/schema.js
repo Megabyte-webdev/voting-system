@@ -49,7 +49,8 @@ export const candidates = pgTable("candidates", {
     onDelete: "cascade",
   }),
   name: varchar("name", { length: 150 }).notNull(),
-  photo: text("photo"),
+  photo: text("photo"), // Cloudinary URL
+  photoPublicId: varchar("photo_public_id", { length: 255 }), // Cloudinary public_id
   manifesto: text("manifesto"),
 });
 

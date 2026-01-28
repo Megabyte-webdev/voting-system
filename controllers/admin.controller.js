@@ -9,6 +9,7 @@ import {
 } from "../db/schema.js";
 import { eq } from "drizzle-orm";
 import sanitizeHtml from "sanitize-html";
+import { uploadToCloudinary } from "../middlewares/imageUpload.js";
 
 /* -------------------- Security Utilities -------------------- */
 
@@ -112,10 +113,10 @@ export async function createPosition(req, res) {
 }
 
 /* -------------------- Create Candidate -------------------- */
-
 export async function createCandidate(req, res) {
   try {
-    const { positionId, name, photo, manifesto } = req.body;
+    const { positionId, name, manifesto } = req.body;
+    const file = req.file; // multer
 
     if (!isUUID(positionId) || !isSafeText(name, 120)) {
       return res.status(400).json({ error: "Invalid input." });
@@ -130,13 +131,23 @@ export async function createCandidate(req, res) {
       return res.status(404).json({ error: "Position not found." });
     }
 
+    let photoUrl = null;
+    let photoPublicId = null;
+
+    if (file) {
+      const uploadResult = await uploadToCloudinary(file.buffer);
+      photoUrl = uploadResult.url;
+      photoPublicId = uploadResult.publicId;
+    }
+
     const id = uuidv4();
 
     await db.insert(candidates).values({
       id,
       positionId,
       name: name.trim(),
-      photo: isSafeText(photo, 500) ? photo.trim() : null,
+      photo: photoUrl,
+      photoPublicId,
       manifesto: isSafeText(manifesto, 2000) ? manifesto.trim() : null,
     });
 
@@ -186,6 +197,7 @@ export async function listElections(req, res) {
       .select({
         id: elections.id,
         title: elections.title,
+        description: elections.description,
         startTime: elections.startTime,
         endTime: elections.endTime,
         status: elections.status,
@@ -207,6 +219,7 @@ export async function getActiveElection(req, res) {
       .select({
         id: elections.id,
         title: elections.title,
+        description: elections.description,
         startTime: elections.startTime,
         endTime: elections.endTime,
         status: elections.status,
@@ -338,10 +351,12 @@ export async function listCandidates(req, res) {
         id: candidates.id,
         name: candidates.name,
         positionId: candidates.positionId,
+        positionName: positions.name,
         photo: candidates.photo,
         manifesto: candidates.manifesto,
       })
-      .from(candidates);
+      .from(candidates)
+      .innerJoin(positions, eq(candidates.positionId, positions.id)); // Join logic
 
     return res.json({ candidates: allCandidates });
   } catch (err) {
@@ -349,6 +364,7 @@ export async function listCandidates(req, res) {
     return res.status(500).json({ error: "Internal server error." });
   }
 }
+
 /******************** List Positions (Safe Fields) ********************/
 
 export async function listPositions(req, res) {
@@ -505,7 +521,8 @@ export async function deletePosition(req, res) {
 export async function updateCandidate(req, res) {
   try {
     const { id } = req.params;
-    const { name, photo, manifesto } = req.body;
+    const { name, manifesto } = req.body;
+    const file = req.file; // multer
 
     if (!isUUID(id))
       return res.status(400).json({ error: "Invalid candidate ID." });
@@ -519,9 +536,28 @@ export async function updateCandidate(req, res) {
       return res.status(404).json({ error: "Candidate not found." });
 
     const updatedFields = {};
+
     if (isSafeText(name, 120)) updatedFields.name = name.trim();
-    if (isSafeText(photo, 500)) updatedFields.photo = photo.trim();
     if (isSafeText(manifesto, 2000)) updatedFields.manifesto = manifesto.trim();
+
+    if (file) {
+      const uploadResult = await uploadToCloudinary(file.buffer);
+
+      updatedFields.photo = uploadResult.url;
+      updatedFields.photoPublicId = uploadResult.publicId;
+
+      // Delete old image from Cloudinary if exists
+      if (candidate.photoPublicId) {
+        try {
+          await cloudinary.v2.uploader.destroy(candidate.photoPublicId);
+        } catch (err) {
+          console.warn("Failed to delete old image:", err.message);
+        }
+      }
+    }
+
+    if (Object.keys(updatedFields).length === 0)
+      return res.status(400).json({ error: "No valid fields to update." });
 
     await db.update(candidates).set(updatedFields).where(eq(candidates.id, id));
 
@@ -552,6 +588,16 @@ export async function deleteCandidate(req, res) {
     if (!candidate)
       return res.status(404).json({ error: "Candidate not found." });
 
+    // Delete the image from Cloudinary if it exists
+    if (candidate.photoPublicId) {
+      try {
+        await cloudinary.v2.uploader.destroy(candidate.photoPublicId);
+      } catch (err) {
+        console.warn("Failed to delete candidate image:", err.message);
+      }
+    }
+
+    // Delete candidate from DB
     await db.delete(candidates).where(eq(candidates.id, id));
 
     return res.json({

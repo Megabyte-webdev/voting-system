@@ -15,6 +15,7 @@ CREATE TABLE "candidates" (
 	"position_id" uuid,
 	"name" varchar(150) NOT NULL,
 	"photo" text,
+	"photo_public_id" varchar(255),
 	"manifesto" text
 );
 --> statement-breakpoint
