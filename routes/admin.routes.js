@@ -18,11 +18,16 @@ import {
   deletePosition,
   updateCandidate,
   deleteCandidate,
+  createAdmin,
+  adminLogin,
 } from "../controllers/admin.controller.js";
 import upload from "../middlewares/multer.js";
 
 const adminRoutes = express.Router();
 
+adminRoutes.post("/login", adminLogin);
+
+adminRoutes.post("/create", createAdmin);
 // Protect all admin routes
 adminRoutes.use(adminAuth);
 

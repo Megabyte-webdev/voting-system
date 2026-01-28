@@ -6,11 +6,13 @@ import {
   candidates,
   votes,
   abuseLogs,
+  admins,
 } from "../db/schema.js";
 import { eq } from "drizzle-orm";
 import sanitizeHtml from "sanitize-html";
 import { uploadToCloudinary } from "../middlewares/imageUpload.js";
-
+import jwt from "jsonwebtoken";
+import bcrypt from "bcryptjs";
 /* -------------------- Security Utilities -------------------- */
 
 const UUID_REGEX = /^[0-9a-fA-F-]{36}$/;
@@ -35,6 +37,86 @@ function isSafeDate(d) {
   const dt = new Date(d);
   return !isNaN(dt.getTime());
 }
+
+/* -------------------------
+Create Admin
+-------------------------- */
+export const createAdmin = async (req, res) => {
+  try {
+    const { name, email, password, role } = req.body;
+
+    if (!name || !email || !password)
+      return res
+        .status(400)
+        .json({ success: false, message: "All fields required" });
+
+    // hash password
+    const passwordHash = await bcrypt.hash(password, 10);
+
+    const newAdmin = await db
+      .insert(admins)
+      .values({
+        name,
+        email,
+        passwordHash,
+        role: role || "admin",
+      })
+      .returning();
+
+    res.json({ success: true, adminId: newAdmin[0].id });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+/* -------------------------
+Admin Login
+-------------------------- */
+export const adminLogin = async (req, res) => {
+  try {
+    const { email, password } = req.body;
+
+    // Correct query using eq()
+    const [admin] = await db
+      .select()
+      .from(admins)
+      .where(eq(admins.email, email)); // <- use eq() from drizzle-orm
+    console.log(admin);
+
+    if (!admin) {
+      return res
+        .status(401)
+        .json({ success: false, message: "Invalid credentials" });
+    }
+
+    const valid = await bcrypt.compare(password, admin.passwordHash);
+    if (!valid) {
+      return res
+        .status(401)
+        .json({ success: false, message: "Invalid credentials" });
+    }
+
+    const token = jwt.sign(
+      { id: admin.id, role: admin.role },
+      process.env.JWT_SECRET,
+      { expiresIn: "12h" },
+    );
+
+    res.json({
+      success: true,
+      token,
+      admin: {
+        id: admin.id,
+        name: admin.name,
+        email: admin.email,
+        role: admin.role,
+      },
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
 
 /* -------------------- Create Election -------------------- */
 

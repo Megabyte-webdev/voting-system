@@ -96,3 +96,16 @@ export const abuseLogs = pgTable("abuse_logs", {
   action: varchar("action", { length: 100 }),
   occurredAt: timestamp("occurred_at").defaultNow(),
 });
+
+export const admins = pgTable("admins", {
+  id: uuid("id").defaultRandom().primaryKey(),
+
+  name: varchar("name", { length: 150 }).notNull(),
+  email: varchar("email", { length: 150 }).notNull().unique(),
+  passwordHash: varchar("password_hash", { length: 255 }).notNull(), // bcrypt hash
+
+  role: varchar("role", { length: 50 }).default("admin"), // admin | superadmin | moderator
+
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
