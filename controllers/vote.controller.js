@@ -25,92 +25,54 @@ export async function submitVote(req, res) {
     const ipAddress = req.ip;
     const userAgent = req.headers["user-agent"] || null;
 
-    // 0. REQUIRED FIELD VALIDATION
-    if (
-      !matricNo ||
-      !deviceId ||
-      !positionId ||
-      !candidateId ||
-      !biometricType
-    ) {
-      return res.status(400).json({ error: "Missing required fields." });
-    }
-
-    if (biometricType !== "none" && !biometricPayload) {
-      return res
-        .status(400)
-        .json({ error: "Biometric verification required." });
-    }
-
-    // 1. Fetch the election ID from the position
+    // 1. Fetch Position and Election context
     const [position] = await db
       .select({ electionId: positions.electionId })
       .from(positions)
       .where(eq(positions.id, positionId));
 
-    if (!position) {
-      return res.status(404).json({ error: "Position not found." });
+    if (!position) return res.status(404).json({ error: "Position not found." });
+
+    // 2. Process Biometric Hash
+    let biometricHash = null;
+    if (biometricType !== "none" && biometricPayload) {
+      // FIX: Assign to the outer variable, do not use 'const' here
+      biometricHash = hashBiometric(biometricPayload);
     }
 
-    const electionId = position.electionId;
-
-    // 2. Block duplicate matric (per election)
-    const existingVoteForPosition = await db
+    // 3. MULTI-LAYER CHECK (Matric + Biometric)
+    // We check both in a single query for efficiency
+    const existingVotes = await db
       .select()
       .from(votes)
       .where(
-        and(eq(votes.matricNo, matricNo), eq(votes.positionId, positionId)),
+        and(
+          eq(votes.positionId, positionId),
+          // Check if either the matric OR the biometric hash already exists
+          biometricHash 
+            ? or(eq(votes.matricNo, matricNo), eq(votes.biometricHash, biometricHash))
+            : eq(votes.matricNo, matricNo)
+        )
       );
 
-    if (existingVoteForPosition.length > 0) {
+    if (existingVotes.length > 0) {
+      const isBiometricMatch = existingVotes.some(v => v.biometricHash === biometricHash);
+      
       await logAbuse({
         matricNo,
-        ipAddress,
-        userAgent,
-        action: "duplicate_vote_by_matric_for_position",
+        action: isBiometricMatch ? "duplicate_biometric" : "duplicate_matric",
+        ipAddress
       });
 
       return res.status(403).json({
-        error: "You have already voted for this position.",
+        error: "You have already cast a vote for this position."
       });
     }
 
-    // 3. Biometric enforcement (per election)
-    let biometricHash = null;
-
-    if (biometricType !== "none") {
-      const biometricHash = hashBiometric(biometricPayload);
-
-      const existingBioForPosition = await db
-        .select()
-        .from(votes)
-        .where(
-          and(
-            eq(votes.biometricHash, biometricHash),
-            eq(votes.positionId, positionId),
-          ),
-        );
-
-      if (existingBioForPosition.length > 0) {
-        await logAbuse({
-          matricNo,
-          biometricHash,
-          biometricType,
-          ipAddress,
-          userAgent,
-          action: "duplicate_vote_by_biometric_for_position",
-        });
-
-        return res.status(403).json({
-          error: "This fingerprint has already been used for this position.",
-        });
-      }
-    }
-
-    // 4. Insert vote
+    // 4. ATOMIC INSERTION
     await db.insert(votes).values({
       matricNo,
-      biometricHash,
+      biometricHash, // Now correctly contains the hash, not null
       biometricType,
       deviceId,
       positionId,
@@ -120,11 +82,7 @@ export async function submitVote(req, res) {
       createdAt: new Date(),
     });
 
-    emitVoteUpdate(electionId, {
-      positionId,
-      candidateId,
-      increment: 1,
-    });
+    emitVoteUpdate(position.electionId, { positionId, candidateId, increment: 1 });
 
     return res.json({ success: true, message: "Vote submitted successfully." });
   } catch (err) {
@@ -132,7 +90,6 @@ export async function submitVote(req, res) {
     return res.status(500).json({ error: "Internal server error." });
   }
 }
-
 /* -------------------- Get Positions + Candidates (Active Election) -------------------- */
 
 export async function getPositionsWithCandidates(req, res) {
