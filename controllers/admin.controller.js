@@ -119,6 +119,30 @@ export const adminLogin = async (req, res) => {
   }
 };
 
+export async function dashboardStats(req, res) {
+  try {
+    // Get counts from each table
+    const electionsCount = await db.select().from(elections);
+    const positionsCount = await db.select().from(positions);
+    const candidatesCount = await db.select().from(candidates);
+    const votesCount = await db.select().from(votes);
+    const abuseLogsCount = await db.select().from(abuseLogs);
+
+    const stats = {
+      activeElections: electionsCount.length,
+      totalPositions: positionsCount.length,
+      totalCandidates: candidatesCount.length,
+      totalVotes: votesCount.length,
+      reportedAbuse: abuseLogsCount.length,
+    };
+
+    return res.json(stats);
+  } catch (err) {
+    console.error("dashboardStats:", err);
+    return res.status(500).json({ error: "Failed to fetch dashboard stats" });
+  }
+}
+
 /* -------------------- Create Election -------------------- */
 
 export async function createElection(req, res) {
@@ -191,6 +215,46 @@ export async function createPosition(req, res) {
     return res.json({ success: true, positionId: id });
   } catch (err) {
     console.error("createPosition:", err);
+    return res.status(500).json({ error: "Internal server error." });
+  }
+}
+export async function updatePosition(req, res) {
+  try {
+    const { id } = req.params;
+    const { name, electionId } = req.body;
+
+    if (!isUUID(id)) {
+      return res.status(400).json({ error: "Invalid position ID." });
+    }
+
+    const [position] = await db
+      .select()
+      .from(positions)
+      .where(eq(positions.id, id));
+
+    if (!position) {
+      return res.status(404).json({ error: "Position not found." });
+    }
+
+    const updatedFields = {};
+
+    if (name && isSafeText(name, 100)) updatedFields.name = name.trim();
+    if (electionId && isUUID(electionId)) updatedFields.electionId = electionId;
+
+    if (Object.keys(updatedFields).length === 0) {
+      return res.status(400).json({ error: "No valid fields to update." });
+    }
+
+    await db.update(positions).set(updatedFields).where(eq(positions.id, id));
+
+    const [updatedPosition] = await db
+      .select()
+      .from(positions)
+      .where(eq(positions.id, id));
+
+    return res.json({ success: true, position: updatedPosition });
+  } catch (err) {
+    console.error("updatePosition:", err);
     return res.status(500).json({ error: "Internal server error." });
   }
 }
@@ -596,8 +660,8 @@ export async function deletePosition(req, res) {
 export async function updateCandidate(req, res) {
   try {
     const { id } = req.params;
-    const { name, manifesto } = req.body;
-    const file = req.file; // multer
+    const { name, manifesto, positionId } = req.body; // include positionId
+    const file = req.file;
 
     if (!isUUID(id))
       return res.status(400).json({ error: "Invalid candidate ID." });
@@ -615,13 +679,29 @@ export async function updateCandidate(req, res) {
     if (isSafeText(name, 120)) updatedFields.name = name.trim();
     if (isSafeText(manifesto, 2000)) updatedFields.manifesto = manifesto.trim();
 
+    // Validate and update positionId
+    if (positionId) {
+      if (!isUUID(positionId))
+        return res.status(400).json({ error: "Invalid position ID." });
+
+      // Check if position exists
+      const [position] = await db
+        .select()
+        .from(positions)
+        .where(eq(positions.id, positionId));
+
+      if (!position)
+        return res.status(404).json({ error: "Position not found." });
+
+      updatedFields.positionId = positionId;
+    }
+
     if (file) {
       const uploadResult = await uploadToCloudinary(file.buffer);
 
       updatedFields.photo = uploadResult.url;
       updatedFields.photoPublicId = uploadResult.publicId;
 
-      // Delete old image from Cloudinary if exists
       if (candidate.photoPublicId) {
         try {
           await cloudinary.v2.uploader.destroy(candidate.photoPublicId);

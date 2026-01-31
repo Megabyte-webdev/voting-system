@@ -20,6 +20,8 @@ import {
   deleteCandidate,
   createAdmin,
   adminLogin,
+  dashboardStats,
+  updatePosition,
 } from "../controllers/admin.controller.js";
 import upload from "../middlewares/multer.js";
 
@@ -38,10 +40,12 @@ adminRoutes.post("/elections/:id/close", closeElection);
 adminRoutes.patch("/:id/activate", activateElection);
 adminRoutes.patch("/:id/deactivate", deactivateElection);
 adminRoutes.patch("/elections/:id", updateElection);
+adminRoutes.patch("/positions/:id", updatePosition);
 
 adminRoutes.post("/candidates", upload.single("photo"), createCandidate);
 adminRoutes.patch("/candidates/:id", upload.single("photo"), updateCandidate);
 
+adminRoutes.get("/dashboard/stats", dashboardStats);
 /* -------------------- New CRUD Routes -------------------- */
 // Delete election
 adminRoutes.delete("/elections/:id", deleteElection);

@@ -9,6 +9,7 @@ import {
 import { and, eq } from "drizzle-orm";
 import { hashBiometric } from "../services/biometric.service.js";
 import { logAbuse } from "../services/abuse.service.js";
+import { emitVoteUpdate } from "../services/socket.js";
 
 export async function submitVote(req, res) {
   try {
@@ -117,6 +118,12 @@ export async function submitVote(req, res) {
       ipAddress,
       userAgent,
       createdAt: new Date(),
+    });
+
+    emitVoteUpdate(electionId, {
+      positionId,
+      candidateId,
+      increment: 1,
     });
 
     return res.json({ success: true, message: "Vote submitted successfully." });
